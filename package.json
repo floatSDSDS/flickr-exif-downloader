@@ -1,0 +1,21 @@
+{
+  "name": "flickr-exif-downloader",
+  "description": "Download flickr images with exif data",
+  "version": "0.0.1",
+  "author": "Hamza Harkous",
+  "engines": {
+    "node": "0.10.x",
+    "npm": "1.4.x"
+  },
+  "dependencies": {
+    "async": "^1.5.0",
+    "crafity-imageinfo": "^0.1.0",
+    "exiv2": "^0.6.2",
+    "flickrapi": "^0.3.36",
+    "fs": "0.0.2",
+    "request": "^2.67.0"
+  },
+  "devDependencies": {
+    "supertest": "~0.14.0"
+  }
+}
