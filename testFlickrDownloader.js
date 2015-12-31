@@ -4,7 +4,7 @@
 
 var Flickr = require('flickrapi');
 var async = require('async');
-var exifDown= require('./flickr-exif-downloader');
+var exifDown = require('./flickr-exif-downloader');
 
 /**
  * allows testing the flickr downloader. make sure you use your own information below
@@ -28,12 +28,17 @@ function testDownloader(api_key, secret, user_id, access_token, access_token_sec
         flickr.photos.search({user_id: searchUserId}, function (error, results) {
             console.log('results: ' + JSON.stringify(results));
 
-            async.each(results.photos.photo.slice(0, numPhotos), function (result, callback) {
-                exifDown.downloadWithExif(flickr, result,'./images',function(err){
-                    if (err){
-                        console.log('err: '+err);
-                    }
-                    return callback();
+            async.each(results.photos.photo.slice(0, numPhotos), function (photo, callback) {
+
+                flickr.photos.getInfo({photo_id: photo.id}, function (e, r) {
+                    var flickrLocation = r.photo.location;
+                    //console.log('r: ' + JSON.stringify(flickrLocation));
+                    exifDown.downloadWithExif(flickr, photo, flickrLocation, './images', function (err) {
+                        if (err) {
+                            console.log('err: ' + err);
+                        }
+                        return callback();
+                    });
                 });
             });
         });

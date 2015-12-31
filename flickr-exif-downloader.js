@@ -6,18 +6,20 @@ var async = require('async');
 var imageinfo = require('crafity-imageinfo');
 var exifTags = require('./exifTags');
 var path = require('path');
-var request= require ('request');
-var fs= require ('fs');
+var request = require('request');
+var fs = require('fs');
+var gpsUtil = require('gps-util');
+var _ = require('underscore')
 /**
  * convert flickr gps format to decimal format
  * @param val
  * @returns {*}
  */
 function convertToDecimal(val) {
-    var regExp = new RegExp("(\\d+) deg ([0-9.]+)' ([0-9.]+)\"")
+    var regExp = new RegExp("(\\d+) deg ([0-9.]+)' ([0-9.]+)\"");
     var data = regExp.exec(val);
     if (!data) {
-        console.log("NO MATCH " + val)
+        console.log("NO MATCH " + val);
         return 0;
     }
 
@@ -28,13 +30,50 @@ function convertToDecimal(val) {
     return deg + "/1 " + min + "/1 " + Math.floor(sec) + "/1";
 }
 
+/**
+ * convert a decimal value
+ * @param decimal
+ * @returns {string}
+ */
+function convertDecimalToExivFormat(decimal) {
+    var dd = gpsUtil.toDMS(decimal);
+
+    var deg = dd.degrees;
+    var min = dd.minutes;
+    var sec = dd.seconds;
+
+    return deg + "/1 " + min + "/1 " + Math.floor(sec) + "/1";
+}
+/**
+ * input:
+ * @param locationObj of format: {"latitude": "-33.933339","longitude": "151.177550",...}
+ * @returns {string}
+ */
+function convertFlickrLocationtoExivFormat(location) {
+    if (!location.latitude || (!location.longitude)) {
+        return {};
+    }
+    latitude = convertDecimalToExivFormat(parseFloat(location.latitude));
+    longitude = convertDecimalToExivFormat(parseFloat(location.longitude));
+    latitudeRef = parseFloat(location.latitude) > 0 ? 'N' : 'S'
+    longitudeRef = parseFloat(location.longitude) > 0 ? 'E' : 'W'
+    return {
+        latitude: latitude,
+        longitude: longitude,
+        latitudeRef: latitudeRef,
+        longitudeRef: longitudeRef
+
+    }
+}
+
 
 /**
  * convert the exif format from flickr's output format to exiv2 library input format
  * @param flickrExif
+ * @param flickrLocation
  * @returns {{}}
  */
-function convertExifFormat(flickrExif) {
+function convertExifFormat(flickrExif, flickrLocation) {
 
     var nodeExif = {};
     var exifArray = flickrExif.photo.exif;
@@ -117,6 +156,32 @@ function convertExifFormat(flickrExif) {
 
             }
         }
+        // if the exif didn't contain gps data, then apply flickr location info when available
+        if (_.isEmpty(nodeExif["Exif.GPSInfo.GPSLongitudeRef"])) {
+            //console.log('no exif gps, trying with flickr ');
+            if (!_.isEmpty(flickrLocation)) {
+                var exivCompatibleLocation = convertFlickrLocationtoExivFormat(flickrLocation);
+                if (!_.isEmpty(exivCompatibleLocation)) {
+                    //console.log('applying flickr location');
+
+                    nodeExif["Exif.GPSInfo.GPSLongitudeRef"] = exivCompatibleLocation.longitudeRef;
+                    nodeExif["Exif.GPSInfo.GPSLatitudeRef"] = exivCompatibleLocation.latitudeRef;
+                    nodeExif["Exif.GPSInfo.GPSLongitude"] = exivCompatibleLocation.longitude;
+                    nodeExif["Exif.GPSInfo.GPSLatitude"] = exivCompatibleLocation.latitude;
+                }
+
+                else {
+                    //console.log('cannot parse flickr location');
+                }
+            }
+            else {
+                //console.log('no  flickr location');
+            }
+        }
+        else {
+            //console.log('gps exif used')
+        }
+
     }
     return nodeExif;
 }
@@ -159,9 +224,10 @@ function applyPhotoExif(filePath, nodeExif, callback) {
  * @param flickr
  * @param filePath
  * @param photo_id
+ * @param flickrLocation
  * @param callback
  */
-function addExif(flickr, filePath, photo_id, callback) {
+function addExif(flickr, filePath, photo_id, flickrLocation, callback) {
     //console.log('processing photo ' + photo_id);
     async.waterfall(
         [
@@ -172,7 +238,7 @@ function addExif(flickr, filePath, photo_id, callback) {
 
                     }
                     else {
-                        wfCallback(null, convertExifFormat(result))
+                        wfCallback(null, convertExifFormat(result, flickrLocation))
                     }
                 });
             },
@@ -196,10 +262,11 @@ function addExif(flickr, filePath, photo_id, callback) {
  * download the image with its exif data, given the photo object from flickr api
  * @param flickr
  * @param photoObject
+ * @param flickrLocation
  * @param folder
  * @param callback
  */
-function downloadWithExif(flickr, photoObject, folder, callback) {
+function downloadWithExif(flickr, photoObject, flickrLocation, folder, callback) {
     var url = 'https://farm' + photoObject.farm +
         '.staticflickr.com/' + photoObject.server +
         '/' + photoObject.id +
@@ -215,7 +282,7 @@ function downloadWithExif(flickr, photoObject, folder, callback) {
                 });
             },
             function (seriesCallback) {
-                addExif(flickr, filePath, photoObject.id, seriesCallback);
+                addExif(flickr, filePath, photoObject.id, flickrLocation, seriesCallback);
             }
         ], function (err) {
             if (err) {
