@@ -8,7 +8,6 @@ var exifTags = require('./exifTags');
 var path = require('path');
 var request = require('request');
 var fs = require('fs');
-var gpsUtil = require('gps-util');
 var _ = require('underscore')
 /**
  * convert flickr gps format to decimal format
@@ -31,12 +30,26 @@ function convertToDecimal(val) {
 }
 
 /**
+ * convert decimal to gps format
+ * @param decDegrees
+ * @returns {{}}
+ */
+var toDMS = function(decDegrees) {
+    var dd = {};
+    decDegrees = Math.abs(decDegrees);
+    dd.degrees = Math.floor(decDegrees);
+    dd.minutes = Math.floor(decDegrees * 60) % 60;
+    dd.seconds = Math.round(100 * ((decDegrees * 3600) % 60)) / 100;
+    return dd;
+};
+
+/**
  * convert a decimal value
  * @param decimal
  * @returns {string}
  */
 function convertDecimalToExivFormat(decimal) {
-    var dd = gpsUtil.toDMS(decimal);
+    var dd = toDMS(decimal);
 
     var deg = dd.degrees;
     var min = dd.minutes;
