@@ -1,7 +1,7 @@
 {
   "name": "flickr-exif-downloader",
   "description": "Download flickr images with exif data",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "author": "Hamza Harkous",
   "engines": {
     "node": "0.10.x",
