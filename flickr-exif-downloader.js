@@ -8,6 +8,7 @@ var exifTags = require('./exifTags');
 var path = require('path');
 var request = require('request');
 var fs = require('fs');
+var https = require('https');
 var _ = require('underscore')
 /**
  * convert flickr gps format to decimal format
@@ -278,28 +279,68 @@ function addExif(flickr, filePath, photo_id, flickrLocation, callback) {
     );
 }
 
+
+function downloadUrl(url, dest, cb) {
+    var file = fs.createWriteStream(dest);
+    var request = https.get(url, function(response) {
+        response.pipe(file);
+        file.on('finish', function() {
+            file.close(cb);
+        });
+    });
+}
+
+
 /**
  * download the image with its exif data, given the photo object from flickr api
  * @param flickr
  * @param photoObject
  * @param flickrLocation
  * @param folder
+ * @param minWidth
  * @param callback
  */
-function downloadWithExif(flickr, photoObject, flickrLocation, folder, callback) {
-    var url = 'https://farm' + photoObject.farm +
-        '.staticflickr.com/' + photoObject.server +
-        '/' + photoObject.id +
-        '_' + photoObject.secret +
-        '.jpg';
+function downloadWithExif(flickr, photoObject, flickrLocation, folder, minWidth, callback) {
+    //var url = 'https://farm' + photoObject.farm +
+    //    '.staticflickr.com/' + photoObject.server +
+    //    '/' + photoObject.id +
+    //    '_' + photoObject.secret +
+    //    '.jpg';
 
     var filePath = path.join(folder, photoObject.id + '.jpg');
     async.series(
         [
             function (seriesCallback) {
-                request.head(url, function (err, response, data) {
-                    request(url).pipe(fs.createWriteStream(filePath)).on('close', seriesCallback);
+
+
+                flickr.photos.getSizes({photo_id: photoObject.id}, function(err, result) {
+                    if (err) {
+                        return seriesCallback(err);
+                    }
+
+                    // search for a large enough photo
+                    var sizes = result.sizes.size;
+                    var url=null;
+                    for (var j = 0; j < sizes.length; j++) {
+                        var size = sizes[j];
+                        if (size.width > minWidth) {
+                            //console.log(size.source);
+                            url =size.source;
+                            break;
+                        }
+                    }
+                    // if no large enough photo is found, go with the max size available
+                    if (url==null){
+                        url=sizes[sizes.length-1];
+                    }
+
+                    downloadUrl(size.source, filePath, function (err) {
+                        return seriesCallback(err);
+                    });
                 });
+
+
+
             },
             function (seriesCallback) {
                 addExif(flickr, filePath, photoObject.id, flickrLocation, seriesCallback);
