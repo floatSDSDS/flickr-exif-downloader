@@ -79,6 +79,28 @@ function convertFlickrLocationtoExivFormat(location) {
     }
 }
 
+function applyAlternativeLocationInfoAsExif(flickrLocation,nodeExif){
+
+    //console.log('no exif gps, trying with flickr ');
+    if (!_.isEmpty(flickrLocation)) {
+        var exivCompatibleLocation = convertFlickrLocationtoExivFormat(flickrLocation);
+        if (!_.isEmpty(exivCompatibleLocation)) {
+            //console.log('applying flickr location');
+
+            nodeExif["Exif.GPSInfo.GPSLongitudeRef"] = exivCompatibleLocation.longitudeRef;
+            nodeExif["Exif.GPSInfo.GPSLatitudeRef"] = exivCompatibleLocation.latitudeRef;
+            nodeExif["Exif.GPSInfo.GPSLongitude"] = exivCompatibleLocation.longitude;
+            nodeExif["Exif.GPSInfo.GPSLatitude"] = exivCompatibleLocation.latitude;
+        }
+
+        else {
+            //console.log('cannot parse flickr location');
+        }
+    }
+    else {
+        //console.log('no  flickr location');
+    }
+}
 
 /**
  * convert the exif format from flickr's output format to exiv2 library input format
@@ -86,9 +108,8 @@ function convertFlickrLocationtoExivFormat(location) {
  * @param flickrLocation
  * @returns {{}}
  */
-function convertExifFormat(flickrExif, flickrLocation) {
+function convertExifFormat(nodeExif,flickrExif, flickrLocation) {
 
-    var nodeExif = {};
     var exifArray = flickrExif.photo.exif;
     if (exifArray) {
         for (var i = 0; i < exifArray.length; i++) {
@@ -171,25 +192,7 @@ function convertExifFormat(flickrExif, flickrLocation) {
         }
         // if the exif didn't contain gps data, then apply flickr location info when available
         if (_.isEmpty(nodeExif["Exif.GPSInfo.GPSLongitudeRef"])) {
-            //console.log('no exif gps, trying with flickr ');
-            if (!_.isEmpty(flickrLocation)) {
-                var exivCompatibleLocation = convertFlickrLocationtoExivFormat(flickrLocation);
-                if (!_.isEmpty(exivCompatibleLocation)) {
-                    //console.log('applying flickr location');
-
-                    nodeExif["Exif.GPSInfo.GPSLongitudeRef"] = exivCompatibleLocation.longitudeRef;
-                    nodeExif["Exif.GPSInfo.GPSLatitudeRef"] = exivCompatibleLocation.latitudeRef;
-                    nodeExif["Exif.GPSInfo.GPSLongitude"] = exivCompatibleLocation.longitude;
-                    nodeExif["Exif.GPSInfo.GPSLatitude"] = exivCompatibleLocation.latitude;
-                }
-
-                else {
-                    //console.log('cannot parse flickr location');
-                }
-            }
-            else {
-                //console.log('no  flickr location');
-            }
+            applyAlternativeLocationInfoAsExif(flickrLocation,nodeExif)
         }
         else {
             //console.log('gps exif used')
@@ -242,20 +245,24 @@ function applyPhotoExif(filePath, nodeExif, callback) {
  */
 function addExif(flickr, filePath, photo_id, flickrLocation, callback) {
     //console.log('processing photo ' + photo_id);
-    async.waterfall(
+    var locationAvailable= false;
+    var nodeExif={};
+    async.series(
         [
             function (wfCallback) {
                 getPhotoExif(flickr, photo_id, function (err, result) {
                     if (err) {
-                        wfCallback(err);
+                        applyAlternativeLocationInfoAsExif(flickrLocation,nodeExif);
+                        wfCallback(null);
 
                     }
                     else {
-                        wfCallback(null, convertExifFormat(result, flickrLocation))
+                        // get the exif info
+                        wfCallback(null, convertExifFormat(nodeExif,result, flickrLocation))
                     }
                 });
             },
-            function (nodeExif, wfCallback) {
+            function (wfCallback) {
                 //console.log('nodeexif: ' + JSON.stringify(nodeExif));
                 applyPhotoExif(filePath, nodeExif, wfCallback);
             }
